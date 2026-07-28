@@ -76,7 +76,7 @@ if (!token) {
             console.error("❌ Baza bilan ulanishda xatolik:", e);
         }
 
-        const baseUrl = process.env.WEBAPP_URL || 'https://presentaton-frontend-hjx1t5rdi-temurbekcoder712-6725s-projects.vercel.app';
+        const baseUrl = process.env.WEBAPP_URL || 'https://presentaton-frontend.vercel.app';
         const webAppUrl = `${baseUrl}?chatId=${chatId}`;
 
         ctx.reply(
