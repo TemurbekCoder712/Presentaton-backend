@@ -185,7 +185,7 @@ app.post('/api/generate-slides', async (req, res) => {
         console.log('✅ MegaLLM javob berdi. Gemini dizaynga o\'tkazmoqda...');
 
         // 2. Gemini orqali Dizayn va Formatlash (Gemini - Dizayner)
-        const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const geminiPrompt = `Senga xom matn beraman. Sen uni PPTX dizayni uchun qat'iy JSON array formatiga o'tkazishing kerak. Har bir slayd uchun quyidagi maydonlar bo'lishi shart:
 - title: Slayd sarlavhasi
 - bullets: Slayddagi matnlar (qisqa qisqa punktlar arrayi)
@@ -317,7 +317,7 @@ app.post('/api/support-chat', async (req, res) => {
     if (!message) return res.status(400).json({ success: false, error: "Xabar kiritilmagan" });
 
     try {
-        const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const systemPrompt = "Sen Presentation AI loyihasining rasmiy maslahatchisi (Support Bot) san. Yaratuvching: Temurbek (TemurbekCoder). Sen faqat loyiha qanday ishlashi, narxlar va taqdimotlar tayyorlash haqida yordam berasan. Qisqa, samimiy va o'zbek tilida javob ber. Agar dasturlash, matematika, siyosat yoki boshqa umuman aloqasi yo'q mavzuda savol berishsa, uzr so'rab o'z ishingga qayt.";
         
         const result = await geminiModel.generateContent(`${systemPrompt}\n\nFoydalanuvchi: ${message}`);
