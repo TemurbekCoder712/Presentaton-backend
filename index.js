@@ -9,6 +9,7 @@ import fs from 'fs';
 import https from 'https';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
+import prisma from './prismaClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -143,6 +144,19 @@ app.post('/api/generate-slides', async (req, res) => {
     let fileName = null;
 
     try {
+        // Balansni tekshiramiz
+        const user = await prisma.user.findUnique({
+            where: { telegramId: BigInt(chatId) }
+        });
+
+        if (!user) {
+            return res.status(400).json({ success: false, error: "Foydalanuvchi topilmadi. Iltimos, Telegram botga kirib /start tugmasini bosing." });
+        }
+
+        if (user.balance <= 0) {
+            return res.status(403).json({ success: false, error: "Sizning balansingiz (limit) tugagan. Iltimos, hisobingizni to'ldiring!" });
+        }
+
         // 1. AI orqali slayd kontent yaratish
         console.log('🤖 AI dan kontent so\'ralyapti...');
         const response = await client.chat.completions.create({
@@ -215,6 +229,12 @@ app.post('/api/generate-slides', async (req, res) => {
 
         // 5. Vaqtinchalik faylni o'chirish
         fs.unlinkSync(fileName);
+
+        // 6. Balansni ayirish
+        await prisma.user.update({
+            where: { telegramId: BigInt(chatId) },
+            data: { balance: { decrement: 1 } }
+        });
 
         res.json({ success: true, slideCount: slidesData.length, slides: slidesData });
 

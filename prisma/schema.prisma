@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  telegramId BigInt   @unique
+  firstName String
+  lastName  String?
+  username  String?
+  balance   Int      @default(1) // Har bir yangi mijozga 1 ta bepul
+  planType  String   @default("free") // free, start, pro, premium, max1, max2
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

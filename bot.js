@@ -7,6 +7,7 @@ import fs from 'fs';
 import axios from 'axios';
 import https from 'https';
 import { fileURLToPath } from 'url';
+import prisma from './prismaClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,10 +50,33 @@ if (!token) {
     }
 
     // /start buyrug'i
-    bot.start((ctx) => {
-        const baseUrl = process.env.WEBAPP_URL || 'https://presentaton-frontend-hjx1t5rdi-temurbekcoder712-6725s-projects.vercel.app';
+    bot.start(async (ctx) => {
         const chatId = ctx.from.id;
         const firstName = ctx.from.first_name || 'Ustoz';
+
+        try {
+            const existingUser = await prisma.user.findUnique({
+                where: { telegramId: BigInt(chatId) }
+            });
+
+            if (!existingUser) {
+                await prisma.user.create({
+                    data: {
+                        telegramId: BigInt(chatId),
+                        firstName: firstName,
+                        lastName: ctx.from.last_name || null,
+                        username: ctx.from.username || null,
+                        balance: 1, // 1 ta bepul
+                        planType: "free"
+                    }
+                });
+                console.log(`✅ Yangi foydalanuvchi bazaga qo'shildi: ${firstName} (${chatId})`);
+            }
+        } catch (e) {
+            console.error("❌ Baza bilan ulanishda xatolik:", e);
+        }
+
+        const baseUrl = process.env.WEBAPP_URL || 'https://presentaton-frontend-hjx1t5rdi-temurbekcoder712-6725s-projects.vercel.app';
         const webAppUrl = `${baseUrl}?chatId=${chatId}`;
 
         ctx.reply(
