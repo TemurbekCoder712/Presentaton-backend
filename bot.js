@@ -50,7 +50,7 @@ if (!token) {
 
     // /start buyrug'i
     bot.start((ctx) => {
-        const baseUrl = process.env.WEBAPP_URL || 'http://localhost:5173';
+        const baseUrl = process.env.WEBAPP_URL || 'https://presentaton-frontend-hjx1t5rdi-temurbekcoder712-6725s-projects.vercel.app';
         const chatId = ctx.from.id;
         const firstName = ctx.from.first_name || 'Ustoz';
         const webAppUrl = `${baseUrl}?chatId=${chatId}`;
