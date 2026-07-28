@@ -149,6 +149,8 @@ app.post('/api/generate-slides', async (req, res) => {
 
     try {
         // Balansni tekshiramiz
+        // Balansni tekshiramiz (MVP uchun o'chirildi)
+        /*
         const user = await prisma.user.findUnique({
             where: { telegramId: BigInt(chatId) }
         });
@@ -160,6 +162,7 @@ app.post('/api/generate-slides', async (req, res) => {
         if (user.balance <= 0) {
             return res.status(403).json({ success: false, error: "Sizning balansingiz (limit) tugagan. Iltimos, hisobingizni to'ldiring!" });
         }
+        */
 
         // 1. AI orqali slayd kontent yaratish (MegaLLM - Miya)
         console.log('🧠 MegaLLM dan kontent so\'ralyapti...');
@@ -182,7 +185,7 @@ app.post('/api/generate-slides', async (req, res) => {
         console.log('✅ MegaLLM javob berdi. Gemini dizaynga o\'tkazmoqda...');
 
         // 2. Gemini orqali Dizayn va Formatlash (Gemini - Dizayner)
-        const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const geminiModel = genAI.getGenerativeModel({ model: "gemini-pro" });
         const geminiPrompt = `Senga xom matn beraman. Sen uni PPTX dizayni uchun qat'iy JSON array formatiga o'tkazishing kerak. Har bir slayd uchun quyidagi maydonlar bo'lishi shart:
 - title: Slayd sarlavhasi
 - bullets: Slayddagi matnlar (qisqa qisqa punktlar arrayi)
@@ -272,11 +275,13 @@ ${rawContent}`;
         // 5. Vaqtinchalik faylni o'chirish
         fs.unlinkSync(fileName);
 
-        // 6. Balansni ayirish
+        // 6. Balansni ayirish (MVP uchun o'chirildi)
+        /*
         await prisma.user.update({
             where: { telegramId: BigInt(chatId) },
             data: { balance: { decrement: 1 } }
         });
+        */
 
         res.json({ success: true, slideCount: slidesData.length, slides: slidesData });
 
@@ -312,7 +317,7 @@ app.post('/api/support-chat', async (req, res) => {
     if (!message) return res.status(400).json({ success: false, error: "Xabar kiritilmagan" });
 
     try {
-        const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const geminiModel = genAI.getGenerativeModel({ model: "gemini-pro" });
         const systemPrompt = "Sen Presentation AI loyihasining rasmiy maslahatchisi (Support Bot) san. Yaratuvching: Temurbek (TemurbekCoder). Sen faqat loyiha qanday ishlashi, narxlar va taqdimotlar tayyorlash haqida yordam berasan. Qisqa, samimiy va o'zbek tilida javob ber. Agar dasturlash, matematika, siyosat yoki boshqa umuman aloqasi yo'q mavzuda savol berishsa, uzr so'rab o'z ishingga qayt.";
         
         const result = await geminiModel.generateContent(`${systemPrompt}\n\nFoydalanuvchi: ${message}`);

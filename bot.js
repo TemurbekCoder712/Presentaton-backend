@@ -55,6 +55,7 @@ if (!token) {
         const firstName = ctx.from.first_name || 'Ustoz';
 
         try {
+            /* 
             const existingUser = await prisma.user.findUnique({
                 where: { telegramId: BigInt(chatId) }
             });
@@ -72,6 +73,7 @@ if (!token) {
                 });
                 console.log(`✅ Yangi foydalanuvchi bazaga qo'shildi: ${firstName} (${chatId})`);
             }
+            */
         } catch (e) {
             console.error("❌ Baza bilan ulanishda xatolik:", e);
         }
