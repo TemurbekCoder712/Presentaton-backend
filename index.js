@@ -220,9 +220,9 @@ ${rawContent}`;
             // 1) Asosiy (Sarlavha) Slayd dizayni
             if (i === 0) {
                 slide.background = { fill: themeColor }; 
-                // Katta dekorativ shakllar
-                slide.addShape(pptx.ShapeType.oval, { x: -2, y: -2, w: 6, h: 6, fill: { color: "FFFFFF", transparency: 85 } });
-                slide.addShape(pptx.ShapeType.oval, { x: 7, y: 4, w: 7, h: 7, fill: { color: "FFFFFF", transparency: 90 } });
+                // Katta dekorativ shakllar (to'rtburchak uslubida)
+                slide.addShape(pptx.ShapeType.rect, { x: -1, y: -1, w: 4, h: 4, fill: { color: "FFFFFF", transparency: 85 } });
+                slide.addShape(pptx.ShapeType.rect, { x: 7.5, y: 4.5, w: 5, h: 5, fill: { color: "FFFFFF", transparency: 90 } });
 
                 slide.addText(slideData.title || `Slayd ${i+1}`, {
                     x: 1, y: 2.2, w: 8, h: 1.5, align: "center",
@@ -261,7 +261,7 @@ ${rawContent}`;
                     });
                 }
                 // O'ng tomonda vizual infografika bloki
-                slide.addShape(pptx.ShapeType.roundRect, {
+                slide.addShape(pptx.ShapeType.rect, {
                     x: 5.8, y: 1.8, w: 3.8, h: 4.5, fill: { color: themeColor, transparency: 85 }, line: { color: themeColor, width: 2 }
                 });
                 slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'VISUAL', {
@@ -273,7 +273,7 @@ ${rawContent}`;
                         x: 4.6, y: 1.5, w: 4.8, h: 5.2, fontSize: 18, color: "2D3748", fontFace: "Arial", bullet: true, lineSpacing: 24
                     });
                 }
-                slide.addShape(pptx.ShapeType.roundRect, {
+                slide.addShape(pptx.ShapeType.rect, {
                     x: 0.4, y: 1.8, w: 3.8, h: 4.5, fill: { color: themeColor, transparency: 85 }, line: { color: themeColor, width: 2 }
                 });
                 slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'INFO', {
@@ -281,7 +281,7 @@ ${rawContent}`;
                 });
             } else {
                 // Centered - Karta uslubida
-                slide.addShape(pptx.ShapeType.roundRect, {
+                slide.addShape(pptx.ShapeType.rect, {
                     x: 1.0, y: 1.8, w: 8.0, h: 4.8, fill: { color: "FFFFFF" }
                 });
                 if (slideData.bullets && slideData.bullets.length > 0) {
