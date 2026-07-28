@@ -231,3 +231,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n✅ Backend server localhost:${PORT} da ishga tushdi!\n`);
 });
+
+// Telegram botni ishga tushirish
+import './bot.js';
