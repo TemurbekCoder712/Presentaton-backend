@@ -10,6 +10,7 @@ import https from 'https';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import prisma from './prismaClient.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +30,9 @@ const client = new OpenAI({
     baseURL: "https://ai.megallm.io/v1",
     apiKey: process.env.MEGALLM_API_KEY
 });
+
+// Gemini Client
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
@@ -157,34 +161,50 @@ app.post('/api/generate-slides', async (req, res) => {
             return res.status(403).json({ success: false, error: "Sizning balansingiz (limit) tugagan. Iltimos, hisobingizni to'ldiring!" });
         }
 
-        // 1. AI orqali slayd kontent yaratish
-        console.log('🤖 AI dan kontent so\'ralyapti...');
-        const response = await client.chat.completions.create({
+        // 1. AI orqali slayd kontent yaratish (MegaLLM - Miya)
+        console.log('🧠 MegaLLM dan kontent so\'ralyapti...');
+        const megaResponse = await client.chat.completions.create({
             model: "deepseek-ai/deepseek-v3.1",
             messages: [
                 {
                     role: "system",
-                    content: "Sen dars taqdimotlari uchun faqat qat'iy JSON formatida javob beradigan yordamchisan. Hech qanday markdown teglari yoki tushuntirish qo'shma."
+                    content: "Sen eng aqlli o'qituvchisan. Berilgan mavzu bo'yicha eng muhim va qiziqarli faktlarni yig'ib ber. 5 ta slayd uchun reja va qisqacha ma'lumotlar yoz. Hech qanday markdown ishlatma."
                 },
                 {
                     role: "user",
-                    content: `Mavzu: "${topic}". 5 ta slayd uchun qisqa kontent tayyorla. Har bir punkt maksimal 5-7 ta so'zdan iborat bo'lsin. Javob faqat shu formatda bo'lsin: [{"title": "Sarlavha", "bullets": ["1-punkt", "2-punkt"]}]`
+                    content: `Mavzu: "${topic}"`
                 }
             ],
-            max_tokens: 800
+            max_tokens: 1500
         });
 
-        let rawContent = response.choices[0].message.content.trim();
-        console.log('✅ AI javobi keldi, parse qilinmoqda...');
+        const rawContent = megaResponse.choices[0].message.content.trim();
+        console.log('✅ MegaLLM javob berdi. Gemini dizaynga o\'tkazmoqda...');
+
+        // 2. Gemini orqali Dizayn va Formatlash (Gemini - Dizayner)
+        const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const geminiPrompt = `Senga xom matn beraman. Sen uni PPTX dizayni uchun qat'iy JSON array formatiga o'tkazishing kerak. Har bir slayd uchun quyidagi maydonlar bo'lishi shart:
+- title: Slayd sarlavhasi
+- bullets: Slayddagi matnlar (qisqa qisqa punktlar arrayi)
+- layout: "split-right" (o'ngda rasm), "split-left" (chapda rasm), yoki "centered" (faqat matn)
+- themeColor: Mavzuga mos bitta HEX rang kodi (faqat 6 ta harf/raqam, masalan: 1E3A8A)
+- keyword: Rasm qidirish uchun mos inglizcha bitta so'z (masalan: "space", "computer")
+
+Faqat JSON formatda qaytar, boshqa hech qanday izoh qo'shma.
+Matn:
+${rawContent}`;
+
+        const geminiResult = await geminiModel.generateContent(geminiPrompt);
+        let geminiJsonStr = geminiResult.response.text().trim();
         
-        if (rawContent.startsWith("```")) {
-            rawContent = rawContent.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+        if (geminiJsonStr.startsWith("```")) {
+            geminiJsonStr = geminiJsonStr.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
         }
 
-        const slidesData = JSON.parse(rawContent);
-        console.log(`✅ ${slidesData.length} ta slayd kontent tayyor`);
+        const slidesData = JSON.parse(geminiJsonStr);
+        console.log(`✅ Gemini ${slidesData.length} ta dizaynli slayd tayyorladi.`);
 
-        // 2. PPTX fayl yaratish
+        // 3. PPTX fayl yaratish
         console.log('🎨 PPTX yaratilmoqda...');
         let pptx = new pptxgen();
         pptx.layout = 'LAYOUT_16x9';
@@ -193,26 +213,48 @@ app.post('/api/generate-slides', async (req, res) => {
             let slide = pptx.addSlide();
             slide.background = { fill: "F8F9FA" };
 
+            const themeColor = (slideData.themeColor || "1E3A8A").replace('#', '');
+            const layout = slideData.layout || "split-right";
+
+            // Dizayn dekoratsiyasi (yuqori yoki pastda chiziq)
             slide.addShape(pptx.ShapeType.rect, {
                 x: 0, y: 6.8, w: "100%", h: 0.7,
-                fill: { color: "1E3A8A" }
+                fill: { color: themeColor }
             });
 
-            slide.addText(slideData.title || `Slayd ${i+1}`, {
-                x: 0.8, y: 0.5, w: "85%", h: 0.8,
-                fontSize: 24, bold: true, color: "1E3A8A",
-                fontFace: "Arial"
-            });
-
-            if (slideData.bullets && slideData.bullets.length > 0) {
-                const bodyText = slideData.bullets.join('\n\n');
-                slide.addText(bodyText, {
-                    x: 0.8, y: 1.6, w: "85%", h: 4.8,
-                    fontSize: 16, color: "334155",
-                    bullet: { type: 'number' },
-                    fontFace: "Arial",
-                    lineSpacing: 22
+            if (layout === "split-right") {
+                slide.addText(slideData.title || `Slayd ${i+1}`, {
+                    x: 0.5, y: 0.5, w: "50%", h: 0.8,
+                    fontSize: 26, bold: true, color: themeColor, fontFace: "Arial"
                 });
+                if (slideData.bullets && slideData.bullets.length > 0) {
+                    slide.addText(slideData.bullets.join('\n\n'), {
+                        x: 0.5, y: 1.5, w: "50%", h: 4.8,
+                        fontSize: 18, color: "334155", bullet: { type: 'number' }, fontFace: "Arial", lineSpacing: 22
+                    });
+                }
+            } else if (layout === "split-left") {
+                slide.addText(slideData.title || `Slayd ${i+1}`, {
+                    x: 4.5, y: 0.5, w: "50%", h: 0.8,
+                    fontSize: 26, bold: true, color: themeColor, fontFace: "Arial"
+                });
+                if (slideData.bullets && slideData.bullets.length > 0) {
+                    slide.addText(slideData.bullets.join('\n\n'), {
+                        x: 4.5, y: 1.5, w: "50%", h: 4.8,
+                        fontSize: 18, color: "334155", bullet: { type: 'number' }, fontFace: "Arial", lineSpacing: 22
+                    });
+                }
+            } else {
+                slide.addText(slideData.title || `Slayd ${i+1}`, {
+                    x: 1.0, y: 0.5, w: "80%", h: 0.8, align: "center",
+                    fontSize: 28, bold: true, color: themeColor, fontFace: "Arial"
+                });
+                if (slideData.bullets && slideData.bullets.length > 0) {
+                    slide.addText(slideData.bullets.join('\n\n'), {
+                        x: 1.0, y: 1.5, w: "80%", h: 4.8,
+                        fontSize: 20, color: "334155", align: "center", fontFace: "Arial", lineSpacing: 24
+                    });
+                }
             }
         });
 
@@ -244,6 +286,42 @@ app.post('/api/generate-slides', async (req, res) => {
             try { fs.unlinkSync(fileName); } catch(e) {}
         }
         res.status(500).json({ success: false, error: error.message || 'Noma\'lum xatolik' });
+    }
+});
+
+/**
+ * @swagger
+ * /api/support-chat:
+ *   post:
+ *     summary: AI Yordamchi bilan suhbatlashish
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               message:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: AI javobi
+ */
+app.post('/api/support-chat', async (req, res) => {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ success: false, error: "Xabar kiritilmagan" });
+
+    try {
+        const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const systemPrompt = "Sen Presentation AI loyihasining rasmiy maslahatchisi (Support Bot) san. Yaratuvching: Temurbek (TemurbekCoder). Sen faqat loyiha qanday ishlashi, narxlar va taqdimotlar tayyorlash haqida yordam berasan. Qisqa, samimiy va o'zbek tilida javob ber. Agar dasturlash, matematika, siyosat yoki boshqa umuman aloqasi yo'q mavzuda savol berishsa, uzr so'rab o'z ishingga qayt.";
+        
+        const result = await geminiModel.generateContent(`${systemPrompt}\n\nFoydalanuvchi: ${message}`);
+        const reply = result.response.text();
+
+        res.json({ success: true, reply });
+    } catch (err) {
+        console.error("Support Chat xatosi:", err);
+        res.status(500).json({ success: false, error: "Server xatosi yuz berdi" });
     }
 });
 
