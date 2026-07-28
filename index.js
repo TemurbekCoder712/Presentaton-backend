@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url';
 import pptxgen from 'pptxgenjs';
 import fs from 'fs';
 import https from 'https';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,7 +80,59 @@ async function sendPptxToTelegram(chatId, filePath, filename) {
     });
 }
 
-// Ana endpoint
+// Swagger sozlamalari
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Presentation AI API',
+      version: '1.0.0',
+      description: 'Telegram bot va Web App uchun taqdimot yaratish API',
+    },
+    servers: [
+      {
+        url: 'https://presentaton-backend.onrender.com',
+        description: 'Render Server',
+      },
+      {
+        url: 'http://localhost:5000',
+        description: 'Local Server',
+      }
+    ],
+  },
+  apis: [fileURLToPath(import.meta.url)], // o'z faylini o'qiydi
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+/**
+ * @swagger
+ * /api/generate-slides:
+ *   post:
+ *     summary: Sun'iy intellekt orqali taqdimot (PPTX) yaratish
+ *     description: Mavzu va Telegram Chat ID qabul qilib, AI orqali PPTX yaratadi va bot orqali foydalanuvchiga yuboradi.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               topic:
+ *                 type: string
+ *                 example: "Fizika yorug'lik tezligi"
+ *               chatId:
+ *                 type: string
+ *                 example: "123456789"
+ *     responses:
+ *       200:
+ *         description: Muvaffaqiyatli yaratildi va jo'natildi
+ *       400:
+ *         description: Noto'g'ri so'rov (mavzu yoki chatId yo'q)
+ *       500:
+ *         description: Server xatosi
+ */
 app.post('/api/generate-slides', async (req, res) => {
     const { topic, chatId } = req.body;
     console.log(`\n📥 So'rov: topic="${topic}", chatId="${chatId}"`);
