@@ -214,48 +214,79 @@ ${rawContent}`;
 
         slidesData.forEach((slideData, i) => {
             let slide = pptx.addSlide();
-            slide.background = { fill: "F8F9FA" };
+            const themeColor = (slideData.themeColor || "6c63ff").replace('#', '');
+            const layout = slideData.layout || "centered";
+            
+            // 1) Asosiy (Sarlavha) Slayd dizayni
+            if (i === 0) {
+                slide.background = { fill: themeColor }; 
+                // Katta dekorativ shakllar
+                slide.addShape(pptx.ShapeType.oval, { x: -2, y: -2, w: 6, h: 6, fill: { color: "FFFFFF", transparency: 85 } });
+                slide.addShape(pptx.ShapeType.oval, { x: 7, y: 4, w: 7, h: 7, fill: { color: "FFFFFF", transparency: 90 } });
 
-            const themeColor = (slideData.themeColor || "1E3A8A").replace('#', '');
-            const layout = slideData.layout || "split-right";
+                slide.addText(slideData.title || `Slayd ${i+1}`, {
+                    x: 1, y: 2.2, w: 8, h: 1.5, align: "center",
+                    fontSize: 48, bold: true, color: "FFFFFF", fontFace: "Arial"
+                });
+                if (slideData.bullets && slideData.bullets.length > 0) {
+                    slide.addText(slideData.bullets.join(' | '), {
+                        x: 1, y: 3.8, w: 8, h: 1, align: "center",
+                        fontSize: 20, color: "F8F9FA", fontFace: "Arial", italic: true
+                    });
+                }
+                return;
+            }
 
-            // Dizayn dekoratsiyasi (yuqori yoki pastda chiziq)
+            // 2) Qolgan slaydlar foni
+            slide.background = { fill: "F4F5F8" };
+
+            // Zamonaviy Header (Sarlavha qismi)
             slide.addShape(pptx.ShapeType.rect, {
-                x: 0, y: 6.8, w: "100%", h: 0.7,
-                fill: { color: themeColor }
+                x: 0, y: 0, w: "100%", h: 1.2, fill: { color: themeColor }
+            });
+            slide.addText(slideData.title || `Slayd ${i+1}`, {
+                x: 0.6, y: 0.1, w: "90%", h: 1.0,
+                fontSize: 28, bold: true, color: "FFFFFF", fontFace: "Arial", align: "left"
             });
 
+            // Pastki chiziq va raqamlash
+            slide.addShape(pptx.ShapeType.rect, { x: 0, y: 7.3, w: "100%", h: 0.2, fill: { color: themeColor } });
+            slide.addText(`${i}`, { x: 9.0, y: 7.0, w: 0.8, h: 0.3, align: "right", fontSize: 12, color: themeColor, fontFace: "Arial" });
+
+            // Layoutlar
             if (layout === "split-right") {
-                slide.addText(slideData.title || `Slayd ${i+1}`, {
-                    x: 0.5, y: 0.5, w: "50%", h: 0.8,
-                    fontSize: 26, bold: true, color: themeColor, fontFace: "Arial"
-                });
                 if (slideData.bullets && slideData.bullets.length > 0) {
                     slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 0.5, y: 1.5, w: "50%", h: 4.8,
-                        fontSize: 18, color: "334155", bullet: { type: 'number' }, fontFace: "Arial", lineSpacing: 22
+                        x: 0.6, y: 1.5, w: 4.8, h: 5.2, fontSize: 18, color: "2D3748", fontFace: "Arial", bullet: true, lineSpacing: 24
                     });
                 }
+                // O'ng tomonda vizual infografika bloki
+                slide.addShape(pptx.ShapeType.roundRect, {
+                    x: 5.8, y: 1.8, w: 3.8, h: 4.5, fill: { color: themeColor, transparency: 85 }, line: { color: themeColor, width: 2 }
+                });
+                slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'VISUAL', {
+                    x: 5.8, y: 3.5, w: 3.8, h: 1, align: "center", fontSize: 24, bold: true, color: themeColor, fontFace: "Arial"
+                });
             } else if (layout === "split-left") {
-                slide.addText(slideData.title || `Slayd ${i+1}`, {
-                    x: 4.5, y: 0.5, w: "50%", h: 0.8,
-                    fontSize: 26, bold: true, color: themeColor, fontFace: "Arial"
-                });
                 if (slideData.bullets && slideData.bullets.length > 0) {
                     slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 4.5, y: 1.5, w: "50%", h: 4.8,
-                        fontSize: 18, color: "334155", bullet: { type: 'number' }, fontFace: "Arial", lineSpacing: 22
+                        x: 4.6, y: 1.5, w: 4.8, h: 5.2, fontSize: 18, color: "2D3748", fontFace: "Arial", bullet: true, lineSpacing: 24
                     });
                 }
+                slide.addShape(pptx.ShapeType.roundRect, {
+                    x: 0.4, y: 1.8, w: 3.8, h: 4.5, fill: { color: themeColor, transparency: 85 }, line: { color: themeColor, width: 2 }
+                });
+                slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'INFO', {
+                    x: 0.4, y: 3.5, w: 3.8, h: 1, align: "center", fontSize: 24, bold: true, color: themeColor, fontFace: "Arial"
+                });
             } else {
-                slide.addText(slideData.title || `Slayd ${i+1}`, {
-                    x: 1.0, y: 0.5, w: "80%", h: 0.8, align: "center",
-                    fontSize: 28, bold: true, color: themeColor, fontFace: "Arial"
+                // Centered - Karta uslubida
+                slide.addShape(pptx.ShapeType.roundRect, {
+                    x: 1.0, y: 1.8, w: 8.0, h: 4.8, fill: { color: "FFFFFF" }
                 });
                 if (slideData.bullets && slideData.bullets.length > 0) {
                     slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 1.0, y: 1.5, w: "80%", h: 4.8,
-                        fontSize: 20, color: "334155", align: "center", fontFace: "Arial", lineSpacing: 24
+                        x: 1.5, y: 2.0, w: 7.0, h: 4.2, fontSize: 20, color: "2D3748", fontFace: "Arial", align: "center", lineSpacing: 28
                     });
                 }
             }
