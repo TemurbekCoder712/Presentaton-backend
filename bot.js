@@ -8,6 +8,7 @@ import axios from 'axios';
 import https from 'https';
 import { fileURLToPath } from 'url';
 import prisma from './prismaClient.js';
+import { appendUserToSheet } from './googleSheets.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,6 +78,9 @@ if (!token) {
         } catch (e) {
             console.error("❌ Baza bilan ulanishda xatolik:", e);
         }
+
+        // Google Sheets ga foydalanuvchini yozib qo'yish
+        appendUserToSheet(ctx.from);
 
         const baseUrl = process.env.WEBAPP_URL || 'https://presentaton-frontend.vercel.app';
         const webAppUrl = `${baseUrl}?chatId=${chatId}`;
