@@ -138,6 +138,67 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
  *       500:
  *         description: Server xatosi
  */
+/**
+ * @swagger
+ * /api/auth:
+ *   post:
+ *     summary: Telegram foydalanuvchisini ro'yxatdan o'tkazish
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: number
+ *               first_name:
+ *                 type: string
+ *               last_name:
+ *                 type: string
+ *               username:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Foydalanuvchi ma'lumotlari
+ */
+app.post('/api/auth', async (req, res) => {
+    const { id, first_name, last_name, username } = req.body;
+    if (!id) return res.status(400).json({ success: false, error: "Telegram ID mavjud emas" });
+
+    try {
+        const user = await prisma.user.upsert({
+            where: { telegramId: BigInt(id) },
+            update: {
+                firstName: first_name || "Foydalanuvchi",
+                lastName: last_name || null,
+                username: username || null,
+            },
+            create: {
+                telegramId: BigInt(id),
+                firstName: first_name || "Foydalanuvchi",
+                lastName: last_name || null,
+                username: username || null,
+                balance: 1,
+                planType: 'free'
+            }
+        });
+        
+        // Prisma returns BigInt which JSON.stringify cannot serialize. So convert to string.
+        res.json({
+            success: true,
+            user: {
+                ...user,
+                telegramId: user.telegramId.toString(),
+                createdAt: user.createdAt.toISOString()
+            }
+        });
+    } catch (err) {
+        console.error("Auth xatosi:", err);
+        res.status(500).json({ success: false, error: "Bazaga yozishda xatolik" });
+    }
+});
+
 app.post('/api/generate-slides', async (req, res) => {
     const { topic, chatId } = req.body;
     console.log(`\n📥 So'rov: topic="${topic}", chatId="${chatId}"`);
