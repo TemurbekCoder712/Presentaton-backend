@@ -344,7 +344,7 @@ ${rawContent}`;
  *         description: AI javobi
  */
 app.post('/api/support-chat', async (req, res) => {
-    const { message } = req.body;
+    const { message, history } = req.body;
     if (!message) return res.status(400).json({ success: false, error: "Xabar kiritilmagan" });
 
     try {
@@ -363,8 +363,15 @@ NARXLAR (TARIFLAR):
 5. School: 100,000 UZS (Cheksiz taqdimot, 1 oylik limit)
 
 Foydalanuvchi qachon narxlar haqida so'rasa, faqat shu tariflarni oddiy matn ko'rinishida yozib ber.`;
+
+        let historyText = "";
+        if (history && Array.isArray(history)) {
+            // Take the last 5 messages to save tokens and keep context fresh
+            const recentHistory = history.slice(-5);
+            historyText = "--- Avvalgi yozishmalar tarixi ---\n" + recentHistory.map(m => `${m.role === 'user' ? 'Foydalanuvchi' : 'Sen'}: ${m.text}`).join('\n') + "\n----------------------------------\n\n";
+        }
         
-        const result = await geminiModel.generateContent(`${systemPrompt}\n\nFoydalanuvchi so'rovi: ${message}`);
+        const result = await geminiModel.generateContent(`${systemPrompt}\n\n${historyText}Foydalanuvchi so'rovi: ${message}`);
         const reply = result.response.text();
 
         res.json({ success: true, reply });
