@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Google Sheets ID
-const SPREADSHEET_ID = '1ypPq4dyGIQne_wC0rTbIFAqqj7u7_TDiC8KCuK8IVxw';
+const SPREADSHEET_ID = '1ypPq4dyGLQne_w00rTbIEAqqJ7u7_TDLC8KCuK8LVxw';
 
 // Credentials file
 const credsPath = path.join(__dirname, 'credentials.json');
