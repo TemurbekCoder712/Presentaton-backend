@@ -117,14 +117,32 @@ if (!token) {
                 messages: [
                     {
                         role: "system",
-                        content: "Sen maktab darslari uchun faqat qat'iy JSON formatida javob beradigan yordamchisan. Hech qanday markdown teglari yoki tushuntirish qo'shma."
+                        content: "Sen taqdimot dizayneri va analitiksan. Faqat qat'iy JSON formatida javob ber. Hech qanday markdown teglari, izohlar yoki qo'shimcha so'zlar qo'shma."
                     },
                     {
                         role: "user",
-                        content: `Mavzu: "${topic}". 5 ta slayd uchun kontent tayyorla. Har bir slayd uchun qisqa inglizcha qidiruv so'zi (keyword) ham ber, shu so'z orqali slaydga rasm topamiz. Har bir punkt maksimal 5-7 ta so'zdan iborat bo'lsin. Javob aynan mana shu formatda bo'lsin: [{"title": "Sarlavha", "bullets": ["1-punkt", "2-punkt"], "keyword": "inglizcha qidiruv so'zi"}]`
+                        content: `Mavzu: "${topic}". Ushbu mavzu bo'yicha 5 ta slayd uchun professional kontent tayyorla.
+Javobing aynan mana shu JSON strukturada bo'lishi shart:
+{
+  "themeColor": "1E3A8A", // Mavzuga mos bitta asosiy rang (masalan, Iqtisodiyot uchun 1E3A8A, Tabiat uchun 2E8B57, va hokazo)
+  "slides": [
+    {
+      "title": "Slayd sarlavhasi",
+      "bullets": ["1-qisqa qoida", "2-fakt"], // Har bir punkt qisqa va aniq bo'lsin
+      "keyword": "inglizcha rasm qidiruv so'zi",
+      "chart": { // Agar shu slaydga statistika kerak deb hisoblasang, qo'sh. Aks holda null qo'y. (Maksimal 1 yoki 2 ta slaydda chart bo'lsin)
+         "type": "bar", // yoki "pie"
+         "title": "Grafika nomi",
+         "labels": ["A", "B", "C"],
+         "values": [10, 20, 30]
+      }
+    }
+  ]
+}
+Faqat toza JSON formatni qaytar.`
                     }
                 ],
-                max_tokens: 1000
+                max_tokens: 1500
             });
 
             let rawContent = response.choices[0].message.content.trim();
@@ -132,7 +150,20 @@ if (!token) {
                 rawContent = rawContent.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
             }
 
-            const slidesData = JSON.parse(rawContent);
+            let presentationData;
+            try {
+                presentationData = JSON.parse(rawContent);
+            } catch (e) {
+                console.error("JSON parse error:", e);
+                throw new Error("AI noto'g'ri formatda ma'lumot qaytardi.");
+            }
+
+            // Agar AI faqat array qaytarsa, uni to'g'rilash
+            if (Array.isArray(presentationData)) {
+                presentationData = { themeColor: "1E3A8A", slides: presentationData };
+            }
+            const slidesData = presentationData.slides || [];
+            const themeColor = (presentationData.themeColor || "1E3A8A").replace('#', '');
 
             await ctx.telegram.editMessageText(
                 ctx.chat.id, 
@@ -150,49 +181,75 @@ if (!token) {
                 
                 slide.background = { fill: "F8F9FA" };
 
-                // Pastki qismdagi ko'k chiziq (Dizayn)
+                // Pastki qismdagi chiziq (Dizayn)
                 slide.addShape(pptx.ShapeType.rect, {
                     x: 0, y: 7.0, w: "100%", h: 0.5,
-                    fill: { color: "1E3A8A" }
+                    fill: { color: themeColor }
                 });
 
                 // Sarlavha
                 slide.addText(slideData.title, { 
-                    x: 0.6, y: 0.5, w: "55%", h: 0.8, 
-                    fontSize: 24, bold: true, color: "1E3A8A",
+                    x: 0.5, y: 0.5, w: "90%", h: 0.8, 
+                    fontSize: 28, bold: true, color: themeColor,
                     fontFace: "Arial"
                 });
                 
-                // Punktlar
-                const bodyText = slideData.bullets.join('\n\n');
+                const hasChart = slideData.chart && slideData.chart.labels && slideData.chart.values && slideData.chart.labels.length > 0;
+                
+                // Matn qismi
+                const bodyText = (slideData.bullets || []).join('\n\n');
                 slide.addText(bodyText, { 
-                    x: 0.6, y: 1.6, w: "55%", h: 4.8, 
-                    fontSize: 15, color: "334155", 
+                    x: 0.5, y: 1.5, w: hasChart ? "45%" : "50%", h: 5.0, 
+                    fontSize: hasChart ? 16 : 18, color: "334155", 
                     bullet: { type: 'number' },
                     fontFace: "Arial",
-                    lineSpacing: 20
+                    valign: 'top',
+                    wrap: true
                 });
 
-                // Rasmlarni yuklab olish ramkasi
-                const imgFilename = `temp_img_${Date.now()}_${i}.jpg`;
-                const searchKeyword = slideData.keyword || "education";
-                const defaultImgUrl = `https://images.unsplash.com/photo-1546410531-bb4caa6b424d?q=80&w=600&auto=format&fit=crop`;
-                const dynamicImageUrl = `https://loremflickr.com/600/450/${encodeURIComponent(searchKeyword)}`;
-
-                try {
-                    await downloadImage(dynamicImageUrl, imgFilename);
-                } catch (imgErr) {
-                    try {
-                        await downloadImage(defaultImgUrl, imgFilename);
-                    } catch(e) {}
-                }
-
-                if (fs.existsSync(imgFilename)) {
-                    slide.addImage({
-                        path: imgFilename,
-                        x: 6.5, y: 0.8, w: 6.3, h: 4.8
+                if (hasChart) {
+                    // Grafika qo'shish
+                    const chartData = [
+                        {
+                            name: slideData.chart.title || 'Statistika',
+                            labels: slideData.chart.labels,
+                            values: slideData.chart.values
+                        }
+                    ];
+                    
+                    const chartType = slideData.chart.type === 'pie' ? pptx.ChartType.pie : pptx.ChartType.bar;
+                    
+                    slide.addChart(chartType, chartData, {
+                        x: 5.2, y: 1.5, w: 4.5, h: 4.5,
+                        showLegend: true, legendPos: 'b',
+                        showTitle: true, title: slideData.chart.title, titleFontSize: 14, titleColor: "334155",
+                        barDir: 'col',
+                        showValue: true,
+                        chartColors: [themeColor, "3B82F6", "10B981", "F59E0B", "EF4444"]
                     });
-                    setTimeout(() => { try { fs.unlinkSync(imgFilename); } catch(e){} }, 5000);
+                } else {
+                    // Rasm qo'shish
+                    const imgFilename = `temp_img_${Date.now()}_${i}.jpg`;
+                    const searchKeyword = slideData.keyword || "education";
+                    const defaultImgUrl = `https://images.unsplash.com/photo-1546410531-bb4caa6b424d?q=80&w=600&auto=format&fit=crop`;
+                    const dynamicImageUrl = `https://loremflickr.com/600/450/${encodeURIComponent(searchKeyword)}`;
+
+                    try {
+                        await downloadImage(dynamicImageUrl, imgFilename);
+                    } catch (imgErr) {
+                        try {
+                            await downloadImage(defaultImgUrl, imgFilename);
+                        } catch(e) {}
+                    }
+
+                    if (fs.existsSync(imgFilename)) {
+                        slide.addImage({
+                            path: imgFilename,
+                            x: 5.5, y: 1.5, w: 4.0, h: 4.5,
+                            sizing: { type: 'cover', w: 4.0, h: 4.5 }
+                        });
+                        setTimeout(() => { try { fs.unlinkSync(imgFilename); } catch(e){} }, 5000);
+                    }
                 }
             }
 
