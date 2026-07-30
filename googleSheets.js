@@ -87,8 +87,8 @@ async function appendFeedbackToSheet(name, username, feedback) {
     }
 }
 
-async function updateUserStatus(telegramId) {
-    if (!creds) return;
+async function updateUserStatus(telegramId, topic = null) {
+    if (!creds || !telegramId) return;
     try {
         const serviceAccountAuth = new JWT({
             email: creds.client_email,
@@ -105,8 +105,31 @@ async function updateUserStatus(telegramId) {
         
         for (let i = rows.length - 1; i >= 0; i--) {
             if (rows[i].get('Telegram ID') === targetId) {
+                let updated = false;
+                
+                // 1. Holatni yangilash
                 if (rows[i].get('Holati') !== '/start bosgan va ilovani ishlatgan') {
                     rows[i].set('Holati', '/start bosgan va ilovani ishlatgan');
+                    updated = true;
+                }
+                
+                // 2. Mavzuni qo'shish
+                if (topic) {
+                    try {
+                        const oldTopic = rows[i].get('Taqdimot mavzusi') || '';
+                        // Agar bu mavzu avval qo'shilmagan bo'lsa
+                        if (!oldTopic.includes(topic)) {
+                            const newTopic = oldTopic ? `${oldTopic}, ${topic}` : topic;
+                            rows[i].set('Taqdimot mavzusi', newTopic);
+                            updated = true;
+                        }
+                    } catch (headerErr) {
+                        // Agar "Taqdimot mavzusi" degan header jadvalda bo'lmasa xato beradi, shuni ushlaymiz
+                        console.log("Jadvalda 'Taqdimot mavzusi' ustuni topilmadi.");
+                    }
+                }
+
+                if (updated) {
                     await rows[i].save();
                     console.log(`✅ Foydalanuvchi holati yangilandi: ${targetId}`);
                 }

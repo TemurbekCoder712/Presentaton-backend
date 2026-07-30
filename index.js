@@ -246,8 +246,8 @@ app.post('/api/generate-slides', async (req, res) => {
     if (!topic) return res.status(400).json({ success: false, error: "Mavzu kiritilmagan" });
     if (!chatId) return res.status(400).json({ success: false, error: "chatId topilmadi" });
 
-    // Holatni fonda yangilash (foydalanuvchini kuttirmaymiz)
-    updateUserStatus(chatId).catch(e => console.error("Holatni yangilashda xato:", e));
+    // Holatni va mavzuni fonda yangilash
+    updateUserStatus(chatId, topic).catch(e => console.error("Holatni yangilashda xato:", e));
 
     let fileName = null;
 
