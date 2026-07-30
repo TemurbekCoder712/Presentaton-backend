@@ -48,4 +48,42 @@ async function appendUserToSheet(user) {
     }
 }
 
-export { appendUserToSheet };
+async function appendFeedbackToSheet(name, username, feedback) {
+    if (!creds) {
+        console.log("⚠️ Credentials fayli yo'q, Google Sheets ga yozilmadi.");
+        return;
+    }
+
+    try {
+        const serviceAccountAuth = new JWT({
+            email: creds.client_email,
+            key: creds.private_key,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        });
+
+        const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+        await doc.loadInfo(); 
+        
+        // 2-sahifa (Лист2 yoki Feedbacklar) index 1 da joylashgan
+        if (doc.sheetCount < 2) {
+            console.error("❌ Google Sheets da 2-sahifa (Feedbacklar) topilmadi!");
+            return;
+        }
+        
+        const sheet = doc.sheetsByIndex[1]; 
+        
+        // Add row
+        await sheet.addRow({
+            'Ism': name || 'Noma\'lum',
+            'Username': username ? (username.startsWith('@') ? username : `@${username}`) : 'No username',
+            'Fikr': feedback || '',
+            'Sana': new Date().toLocaleString('ru-RU')
+        });
+        
+        console.log(`✅ Feedback Google Sheets'ga yozildi: ${name}`);
+    } catch (error) {
+        console.error('❌ Feedbackni Google Sheets ga yozishda xatolik:', error.message);
+    }
+}
+
+export { appendUserToSheet, appendFeedbackToSheet };

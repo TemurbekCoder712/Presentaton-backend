@@ -11,7 +11,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import prisma from './prismaClient.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
+import { appendFeedbackToSheet } from './googleSheets.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -83,6 +83,18 @@ async function sendPptxToTelegram(chatId, filePath, filename) {
         req.write(body);
         req.end();
     });
+}
+
+async function sendTextMessageToTelegram(chatId, text) {
+    try {
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' })
+        });
+    } catch (e) {
+        console.error("Telegramga xabar yuborishda xatolik:", e);
+    }
 }
 
 // Swagger sozlamalari
@@ -196,6 +208,30 @@ app.post('/api/auth', async (req, res) => {
     } catch (err) {
         console.error("Auth xatosi:", err);
         res.status(500).json({ success: false, error: "Bazaga yozishda xatolik" });
+    }
+});
+
+app.post('/api/feedback', async (req, res) => {
+    const { name, username, feedback } = req.body;
+    
+    if (!feedback) {
+        return res.status(400).json({ success: false, error: "Fikr kiritilmagan" });
+    }
+
+    try {
+        // 1. Google Sheets ga yozish
+        await appendFeedbackToSheet(name, username, feedback);
+
+        // 2. Telegram orqali adminga xabar berish
+        const ADMIN_CHAT_ID = "6150067773";
+        const message = `🔔 <b>Yangi fikr/taklif keldi!</b>\n\n👤 <b>Ism:</b> ${name || 'Noma\'lum'}\n🔗 <b>Username:</b> ${username ? '@'+username.replace('@','') : 'Yo\'q'}\n\n💬 <b>Fikr:</b>\n<i>${feedback}</i>`;
+        
+        await sendTextMessageToTelegram(ADMIN_CHAT_ID, message);
+
+        res.json({ success: true, message: "Fikringiz qabul qilindi!" });
+    } catch (e) {
+        console.error("Feedback xatosi:", e);
+        res.status(500).json({ success: false, error: "Tizim xatosi" });
     }
 });
 
