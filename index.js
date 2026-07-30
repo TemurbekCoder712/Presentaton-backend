@@ -197,6 +197,10 @@ app.post('/api/auth', async (req, res) => {
         });
         
         // Prisma returns BigInt which JSON.stringify cannot serialize. So convert to string.
+        
+        // Fonda holatni yangilash (WebApp ochilganda)
+        updateUserStatus(id).catch(e => console.error("Holat yangilashda xato (auth):", e));
+
         res.json({
             success: true,
             user: {

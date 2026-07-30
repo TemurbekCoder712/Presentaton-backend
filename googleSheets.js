@@ -105,8 +105,8 @@ async function updateUserStatus(telegramId) {
         
         for (let i = rows.length - 1; i >= 0; i--) {
             if (rows[i].get('Telegram ID') === targetId) {
-                if (rows[i].get('Holati') !== 'Ilovani ishlatgan') {
-                    rows[i].set('Holati', 'Ilovani ishlatgan');
+                if (rows[i].get('Holati') !== '/start bosgan va ilovani ishlatgan') {
+                    rows[i].set('Holati', '/start bosgan va ilovani ishlatgan');
                     await rows[i].save();
                     console.log(`✅ Foydalanuvchi holati yangilandi: ${targetId}`);
                 }
