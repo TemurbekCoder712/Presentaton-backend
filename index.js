@@ -340,7 +340,12 @@ ${rawContent}`;
 
         async function downloadImageLocal(url, filepath) {
             try {
-                const res = await fetch(url);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 sekund kutish
+                
+                const res = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                
                 if (!res.ok) throw new Error();
                 const arrayBuffer = await res.arrayBuffer();
                 fs.writeFileSync(filepath, Buffer.from(arrayBuffer));
