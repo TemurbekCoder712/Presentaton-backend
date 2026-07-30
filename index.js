@@ -247,14 +247,25 @@ app.post('/api/generate-slides', async (req, res) => {
 
         // 2. Gemini orqali Dizayn va Formatlash (Gemini - Dizayner)
         const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const geminiPrompt = `Senga xom matn beraman. Sen uni PPTX dizayni uchun qat'iy JSON array formatiga o'tkazishing kerak. Har bir slayd uchun quyidagi maydonlar bo'lishi shart:
-- title: Slayd sarlavhasi
-- bullets: Slayddagi matnlar (qisqa qisqa punktlar arrayi)
-- layout: "split-right" (o'ngda rasm), "split-left" (chapda rasm), yoki "centered" (faqat matn)
-- themeColor: Mavzuga mos bitta HEX rang kodi (faqat 6 ta harf/raqam, masalan: 1E3A8A)
-- keyword: Rasm qidirish uchun mos inglizcha bitta so'z (masalan: "space", "computer")
-
-Faqat JSON formatda qaytar, boshqa hech qanday izoh qo'shma.
+        const geminiPrompt = `Senga xom matn beraman. Sen uni PPTX dizayni uchun qat'iy JSON formatiga o'tkazishing kerak. Har bir slayd uchun quyidagi maydonlar bo'lishi shart:
+{
+  "themeColor": "1E3A8A", // Mavzuga mos bitta asosiy rang (masalan: Iqtisodiyot uchun 1E3A8A)
+  "slides": [
+    {
+      "title": "Slayd sarlavhasi",
+      "bullets": ["1-punkt", "2-punkt"], // Qisqa matnlar
+      "layout": "split-right", // yoki "split-left" yoki "centered"
+      "keyword": "inglizcha rasm qidiruv so'zi",
+      "chart": { // Agar mavzuga mos statistika bo'lsa, uni qo'sh. Aks holda null. (Faqat 1-2 ta slaydda)
+         "type": "bar", // yoki "pie"
+         "title": "Grafika nomi",
+         "labels": ["A", "B", "C"],
+         "values": [10, 20, 30]
+      }
+    }
+  ]
+}
+Faqat va faqat JSON obyekt qaytar, boshqa hech qanday so'z qo'shma.
 Matn:
 ${rawContent}`;
 
@@ -265,7 +276,18 @@ ${rawContent}`;
             geminiJsonStr = geminiJsonStr.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
         }
 
-        const slidesData = JSON.parse(geminiJsonStr);
+        let presentationData;
+        try {
+            presentationData = JSON.parse(geminiJsonStr);
+        } catch (e) {
+            let temp = JSON.parse(`[${geminiJsonStr.split('[')[1].split(']')[0]}]`);
+            presentationData = { themeColor: "6c63ff", slides: temp };
+        }
+        if (Array.isArray(presentationData)) {
+            presentationData = { themeColor: "6c63ff", slides: presentationData };
+        }
+        const slidesData = presentationData.slides || [];
+        const globalThemeColor = (presentationData.themeColor || "6c63ff").replace('#', '');
         console.log(`✅ Gemini ${slidesData.length} ta dizaynli slayd tayyorladi.`);
 
         // 3. PPTX fayl yaratish
@@ -273,29 +295,39 @@ ${rawContent}`;
         let pptx = new pptxgen();
         pptx.layout = 'LAYOUT_16x9';
 
-        slidesData.forEach((slideData, i) => {
+        async function downloadImageLocal(url, filepath) {
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error();
+                const arrayBuffer = await res.arrayBuffer();
+                fs.writeFileSync(filepath, Buffer.from(arrayBuffer));
+                return true;
+            } catch(e) { return false; }
+        }
+
+        for (let i = 0; i < slidesData.length; i++) {
+            const slideData = slidesData[i];
             let slide = pptx.addSlide();
-            const themeColor = (slideData.themeColor || "6c63ff").replace('#', '');
+            const themeColor = globalThemeColor;
             const layout = slideData.layout || "centered";
             
             // 1) Asosiy (Sarlavha) Slayd dizayni
             if (i === 0) {
                 slide.background = { fill: themeColor }; 
-                // Katta dekorativ shakllar (to'rtburchak uslubida)
                 slide.addShape(pptx.ShapeType.rect, { x: -1, y: -1, w: 4, h: 4, fill: { color: "FFFFFF", transparency: 85 } });
                 slide.addShape(pptx.ShapeType.rect, { x: 7.5, y: 4.5, w: 5, h: 5, fill: { color: "FFFFFF", transparency: 90 } });
 
                 slide.addText(slideData.title || `Slayd ${i+1}`, {
-                    x: 1, y: 2.2, w: 8, h: 1.5, align: "center",
-                    fontSize: 48, bold: true, color: "FFFFFF", fontFace: "Arial"
+                    x: 0.5, y: 2.0, w: 9, h: 1.5, align: "center",
+                    fontSize: 44, bold: true, color: "FFFFFF", fontFace: "Arial", wrap: true
                 });
                 if (slideData.bullets && slideData.bullets.length > 0) {
                     slide.addText(slideData.bullets.join(' | '), {
-                        x: 1, y: 3.8, w: 8, h: 1, align: "center",
-                        fontSize: 20, color: "F8F9FA", fontFace: "Arial", italic: true
+                        x: 0.5, y: 3.5, w: 9, h: 1.5, align: "center",
+                        fontSize: 18, color: "F8F9FA", fontFace: "Arial", italic: true, wrap: true
                     });
                 }
-                return;
+                continue;
             }
 
             // 2) Qolgan slaydlar foni
@@ -306,52 +338,79 @@ ${rawContent}`;
                 x: 0, y: 0, w: "100%", h: 1.2, fill: { color: themeColor }
             });
             slide.addText(slideData.title || `Slayd ${i+1}`, {
-                x: 0.6, y: 0.1, w: "90%", h: 1.0,
-                fontSize: 28, bold: true, color: "FFFFFF", fontFace: "Arial", align: "left"
+                x: 0.5, y: 0.1, w: "90%", h: 1.0,
+                fontSize: 26, bold: true, color: "FFFFFF", fontFace: "Arial", align: "left", valign: "middle", wrap: true
             });
 
             // Pastki chiziq va raqamlash
             slide.addShape(pptx.ShapeType.rect, { x: 0, y: 7.3, w: "100%", h: 0.2, fill: { color: themeColor } });
             slide.addText(`${i}`, { x: 9.0, y: 7.0, w: 0.8, h: 0.3, align: "right", fontSize: 12, color: themeColor, fontFace: "Arial" });
 
+            const hasChart = slideData.chart && slideData.chart.labels && slideData.chart.values && slideData.chart.labels.length > 0;
+
             // Layoutlar
-            if (layout === "split-right") {
+            if (layout === "split-right" || (layout === "centered" && hasChart)) {
                 if (slideData.bullets && slideData.bullets.length > 0) {
                     slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 0.6, y: 1.5, w: 4.8, h: 5.2, fontSize: 18, color: "2D3748", fontFace: "Arial", bullet: true, lineSpacing: 24
+                        x: 0.5, y: 1.5, w: 4.8, h: 5.2, fontSize: 16, color: "2D3748", fontFace: "Arial", bullet: true, valign: "top", wrap: true
                     });
                 }
-                // O'ng tomonda vizual infografika bloki
-                slide.addShape(pptx.ShapeType.rect, {
-                    x: 5.8, y: 1.8, w: 3.8, h: 4.5, fill: { color: themeColor, transparency: 85 }, line: { color: themeColor, width: 2 }
-                });
-                slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'VISUAL', {
-                    x: 5.8, y: 3.5, w: 3.8, h: 1, align: "center", fontSize: 24, bold: true, color: themeColor, fontFace: "Arial"
-                });
+                if (hasChart) {
+                    const chartData = [{ name: slideData.chart.title || 'Statistika', labels: slideData.chart.labels, values: slideData.chart.values }];
+                    const chartType = slideData.chart.type === 'pie' ? pptx.ChartType.pie : pptx.ChartType.bar;
+                    slide.addChart(chartType, chartData, {
+                        x: 5.6, y: 1.5, w: 4.0, h: 4.5, showLegend: true, legendPos: 'b',
+                        showTitle: true, title: slideData.chart.title, titleFontSize: 14, titleColor: "2D3748",
+                        barDir: 'col', showValue: true, chartColors: [themeColor, "3B82F6", "10B981", "F59E0B"]
+                    });
+                } else {
+                    const imgFilename = `temp_web_${Date.now()}_${i}.jpg`;
+                    const ok = await downloadImageLocal(`https://loremflickr.com/600/450/${encodeURIComponent(slideData.keyword || "education")}`, imgFilename);
+                    if(ok) {
+                        slide.addImage({ path: imgFilename, x: 5.6, y: 1.5, w: 4.0, h: 4.5, sizing: { type: 'cover', w: 4.0, h: 4.5 } });
+                        setTimeout(() => { try { fs.unlinkSync(imgFilename); } catch(e){} }, 5000);
+                    } else {
+                        slide.addShape(pptx.ShapeType.rect, { x: 5.6, y: 1.5, w: 4.0, h: 4.5, fill: { color: themeColor, transparency: 80 } });
+                        slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'VISUAL', { x: 5.6, y: 3.5, w: 4.0, h: 1, align: "center", fontSize: 24, bold: true, color: themeColor });
+                    }
+                }
             } else if (layout === "split-left") {
                 if (slideData.bullets && slideData.bullets.length > 0) {
                     slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 4.6, y: 1.5, w: 4.8, h: 5.2, fontSize: 18, color: "2D3748", fontFace: "Arial", bullet: true, lineSpacing: 24
+                        x: 4.8, y: 1.5, w: 4.8, h: 5.2, fontSize: 16, color: "2D3748", fontFace: "Arial", bullet: true, valign: "top", wrap: true
                     });
                 }
-                slide.addShape(pptx.ShapeType.rect, {
-                    x: 0.4, y: 1.8, w: 3.8, h: 4.5, fill: { color: themeColor, transparency: 85 }, line: { color: themeColor, width: 2 }
-                });
-                slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'INFO', {
-                    x: 0.4, y: 3.5, w: 3.8, h: 1, align: "center", fontSize: 24, bold: true, color: themeColor, fontFace: "Arial"
-                });
+                if (hasChart) {
+                    const chartData = [{ name: slideData.chart.title || 'Statistika', labels: slideData.chart.labels, values: slideData.chart.values }];
+                    const chartType = slideData.chart.type === 'pie' ? pptx.ChartType.pie : pptx.ChartType.bar;
+                    slide.addChart(chartType, chartData, {
+                        x: 0.4, y: 1.5, w: 4.0, h: 4.5, showLegend: true, legendPos: 'b',
+                        showTitle: true, title: slideData.chart.title, titleFontSize: 14, titleColor: "2D3748",
+                        barDir: 'col', showValue: true, chartColors: [themeColor, "3B82F6", "10B981", "F59E0B"]
+                    });
+                } else {
+                    const imgFilename = `temp_web_${Date.now()}_${i}.jpg`;
+                    const ok = await downloadImageLocal(`https://loremflickr.com/600/450/${encodeURIComponent(slideData.keyword || "education")}`, imgFilename);
+                    if(ok) {
+                        slide.addImage({ path: imgFilename, x: 0.4, y: 1.5, w: 4.0, h: 4.5, sizing: { type: 'cover', w: 4.0, h: 4.5 } });
+                        setTimeout(() => { try { fs.unlinkSync(imgFilename); } catch(e){} }, 5000);
+                    } else {
+                        slide.addShape(pptx.ShapeType.rect, { x: 0.4, y: 1.5, w: 4.0, h: 4.5, fill: { color: themeColor, transparency: 80 } });
+                        slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'INFO', { x: 0.4, y: 3.5, w: 4.0, h: 1, align: "center", fontSize: 24, bold: true, color: themeColor });
+                    }
+                }
             } else {
                 // Centered - Karta uslubida
                 slide.addShape(pptx.ShapeType.rect, {
-                    x: 1.0, y: 1.8, w: 8.0, h: 4.8, fill: { color: "FFFFFF" }
+                    x: 1.0, y: 1.5, w: 8.0, h: 5.2, fill: { color: "FFFFFF" }
                 });
                 if (slideData.bullets && slideData.bullets.length > 0) {
                     slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 1.5, y: 2.0, w: 7.0, h: 4.2, fontSize: 20, color: "2D3748", fontFace: "Arial", align: "center", lineSpacing: 28
+                        x: 1.5, y: 1.8, w: 7.0, h: 4.6, fontSize: 18, color: "2D3748", fontFace: "Arial", align: "center", valign: "middle", wrap: true
                     });
                 }
             }
-        });
+        }
 
         // 3. Faylni saqlash (backend papkasida)
         fileName = path.join(__dirname, `${Date.now()}_taqdimot.pptx`);
