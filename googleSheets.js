@@ -39,7 +39,8 @@ async function appendUserToSheet(user) {
             'Telegram ID': user.id?.toString() || '',
             'Ism Familiya': `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
             'Username': user.username ? `@${user.username}` : 'No username',
-            'Sana': new Date().toLocaleString('ru-RU')
+            'Sana': new Date().toLocaleString('ru-RU'),
+            'Holati': 'Faqat /start bosgan'
         });
         
         console.log(`✅ Foydalanuvchi Google Sheets'ga yozildi: ${user.first_name}`);
@@ -86,4 +87,35 @@ async function appendFeedbackToSheet(name, username, feedback) {
     }
 }
 
-export { appendUserToSheet, appendFeedbackToSheet };
+async function updateUserStatus(telegramId) {
+    if (!creds) return;
+    try {
+        const serviceAccountAuth = new JWT({
+            email: creds.client_email,
+            key: creds.private_key,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        });
+
+        const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+        await doc.loadInfo(); 
+        const sheet = doc.sheetsByIndex[0];
+        
+        const rows = await sheet.getRows();
+        const targetId = telegramId.toString();
+        
+        for (let i = rows.length - 1; i >= 0; i--) {
+            if (rows[i].get('Telegram ID') === targetId) {
+                if (rows[i].get('Holati') !== 'Ilovani ishlatgan') {
+                    rows[i].set('Holati', 'Ilovani ishlatgan');
+                    await rows[i].save();
+                    console.log(`✅ Foydalanuvchi holati yangilandi: ${targetId}`);
+                }
+                break;
+            }
+        }
+    } catch (error) {
+        console.error("Holatni yangilashda xatolik:", error.message);
+    }
+}
+
+export { appendUserToSheet, appendFeedbackToSheet, updateUserStatus };
