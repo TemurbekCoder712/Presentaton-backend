@@ -34,16 +34,34 @@ async function appendUserToSheet(user) {
         await doc.loadInfo(); 
         const sheet = doc.sheetsByIndex[0]; 
         
-        // Add row
-        await sheet.addRow({
-            'Telegram ID': user.id?.toString() || '',
-            'Ism Familiya': `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
-            'Username': user.username ? `@${user.username}` : 'No username',
-            'Sana': new Date().toLocaleString('ru-RU'),
-            'Holati': 'Faqat /start bosgan'
-        });
+        const rows = await sheet.getRows();
+        const targetId = user.id?.toString();
         
-        console.log(`✅ Foydalanuvchi Google Sheets'ga yozildi: ${user.first_name}`);
+        let existingRow = null;
+        for (let i = rows.length - 1; i >= 0; i--) {
+            if (rows[i].get('Telegram ID') === targetId) {
+                existingRow = rows[i];
+                break;
+            }
+        }
+
+        if (existingRow) {
+            // Agar foydalanuvchi allaqachon jadvalda bo'lsa, faqat eng oxirgi kirgan sanasini yangilaymiz
+            // Lekin holatini yoki boshqa narsalarini o'zgartirmaymiz (dublikat bo'lmaydi)
+            existingRow.set('Sana', new Date().toLocaleString('ru-RU'));
+            await existingRow.save();
+            console.log(`✅ Foydalanuvchi jadvalda bor, faqat sanasi yangilandi: ${user.first_name}`);
+        } else {
+            // Yangi foydalanuvchini qo'shamiz
+            await sheet.addRow({
+                'Telegram ID': targetId || '',
+                'Ism Familiya': `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
+                'Username': user.username ? `@${user.username}` : 'No username',
+                'Sana': new Date().toLocaleString('ru-RU'),
+                'Holati': 'Faqat /start bosgan'
+            });
+            console.log(`✅ Yangi foydalanuvchi Google Sheets'ga yozildi: ${user.first_name}`);
+        }
     } catch (error) {
         console.error('❌ Google Sheets ga yozishda xatolik:', error.message);
     }
