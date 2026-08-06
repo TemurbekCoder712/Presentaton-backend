@@ -48,7 +48,7 @@ async function appendUserToSheet(user) {
         if (existingRow) {
             // Agar foydalanuvchi allaqachon jadvalda bo'lsa, faqat eng oxirgi kirgan sanasini yangilaymiz
             // Lekin holatini yoki boshqa narsalarini o'zgartirmaymiz (dublikat bo'lmaydi)
-            existingRow.set('Sana', new Date().toLocaleString('ru-RU'));
+            existingRow.set('Sana', new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }));
             await existingRow.save();
             console.log(`✅ Foydalanuvchi jadvalda bor, faqat sanasi yangilandi: ${user.first_name}`);
         } else {
@@ -57,7 +57,7 @@ async function appendUserToSheet(user) {
                 'Telegram ID': targetId || '',
                 'Ism Familiya': `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
                 'Username': user.username ? `@${user.username}` : 'No username',
-                'Sana': new Date().toLocaleString('ru-RU'),
+                'Sana': new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }),
                 'Holati': 'Faqat /start bosgan'
             });
             console.log(`✅ Yangi foydalanuvchi Google Sheets'ga yozildi: ${user.first_name}`);
@@ -96,7 +96,7 @@ async function appendFeedbackToSheet(name, username, feedback) {
             'Ism': name || 'Noma\'lum',
             'Username': username ? (username.startsWith('@') ? username : `@${username}`) : 'No username',
             'Fikr': feedback || '',
-            'Sana': new Date().toLocaleString('ru-RU')
+            'Sana': new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' })
         });
         
         console.log(`✅ Feedback Google Sheets'ga yozildi: ${name}`);
