@@ -85,11 +85,13 @@ if (!token) {
         // Admin ga xabar yuborish
         try {
             const adminId = '6150067773';
-            const dateStr = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
+            const dateStr = new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' });
             const msg = `🔔 <b>Yangi foydalanuvchi botga kirdi!</b>\n\n👤 <b>Ism:</b> ${ctx.from.first_name || 'Mavjud emas'}\n👥 <b>Familiya:</b> ${ctx.from.last_name || 'Mavjud emas'}\n🔗 <b>Username:</b> ${ctx.from.username ? '@' + ctx.from.username : 'Mavjud emas'}\n📅 <b>Sana:</b> ${dateStr}`;
-            await bot.telegram.sendMessage(adminId, msg, { parse_mode: 'HTML' });
+            bot.telegram.sendMessage(adminId, msg, { parse_mode: 'HTML' }).catch(err => {
+                console.error("Adminga xabar yuborishda xatolik:", err);
+            });
         } catch (err) {
-            console.error("Adminga xabar yuborishda xatolik:", err);
+            console.error("Adminga xabar yuborish parametrlarida xatolik:", err);
         }
 
         const baseUrl = process.env.WEBAPP_URL || 'https://presentaton-frontend.vercel.app';
