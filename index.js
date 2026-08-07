@@ -586,10 +586,6 @@ app.post('/api/support-chat', async (req, res) => {
     const { message, history, user } = req.body;
     if (!message) return res.status(400).json({ success: false, error: "Xabar kiritilmagan" });
 
-    if (user && user.id) {
-        await appendQuestionToSheet(user.id, `${user.first_name || ''} ${user.last_name || ''}`.trim(), user.username, message);
-    }
-
     try {
         const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const systemPrompt = `Sen "Presentation AI" loyihasining rasmiy maslahatchisi (Support Bot) san. Yaratuvching: Senior Fullstack Developer Temurbek Narzullayev.
@@ -622,6 +618,12 @@ Foydalanuvchi qachon narxlar haqida so'rasa, faqat shu tariflarni oddiy matn ko'
         
         const result = await geminiModel.generateContent(`${systemPrompt}\n\n${historyText}Foydalanuvchi so'rovi: ${message}`);
         const reply = result.response.text();
+
+        // Savol va javobni Sheets ga yozamiz
+        if (user && user.id) {
+            // Orqada ishlashi uchun await qo'ymasligimiz ham mumkin, lekin to'g'ri yozilishi uchun await qoldirdik
+            appendQuestionToSheet(user.id, `${user.first_name || ''} ${user.last_name || ''}`.trim(), user.username, message, reply).catch(e => console.error(e));
+        }
 
         res.json({ success: true, reply });
     } catch (err) {

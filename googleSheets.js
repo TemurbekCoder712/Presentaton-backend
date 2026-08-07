@@ -105,7 +105,7 @@ async function appendFeedbackToSheet(name, username, feedback) {
     }
 }
 
-async function appendQuestionToSheet(telegramId, name, username, question) {
+async function appendQuestionToSheet(telegramId, name, username, question, aiResponse) {
     if (!creds) {
         console.log("⚠️ Credentials fayli yo'q, Google Sheets ga yozilmadi.");
         return;
@@ -135,7 +135,8 @@ async function appendQuestionToSheet(telegramId, name, username, question) {
             'Ism Familiya': name || 'Noma\'lum',
             'Username': username ? (username.startsWith('@') ? username : `@${username}`) : 'No username',
             'Sana': new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }),
-            'Bergan savoli': question || ''
+            'Bergan savoli': question || '',
+            'Support Javobi': aiResponse || ''
         });
         
         console.log(`✅ Savol Google Sheets'ga yozildi: ${name}`);
