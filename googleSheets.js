@@ -34,34 +34,16 @@ async function appendUserToSheet(user) {
         await doc.loadInfo(); 
         const sheet = doc.sheetsByIndex[0]; 
         
-        const rows = await sheet.getRows();
         const targetId = user.id?.toString();
         
-        let existingRow = null;
-        for (let i = rows.length - 1; i >= 0; i--) {
-            if (rows[i].get('Telegram ID') === targetId) {
-                existingRow = rows[i];
-                break;
-            }
-        }
-
-        if (existingRow) {
-            // Agar foydalanuvchi allaqachon jadvalda bo'lsa, faqat eng oxirgi kirgan sanasini yangilaymiz
-            // Lekin holatini yoki boshqa narsalarini o'zgartirmaymiz (dublikat bo'lmaydi)
-            existingRow.set('Sana', new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }));
-            await existingRow.save();
-            console.log(`✅ Foydalanuvchi jadvalda bor, faqat sanasi yangilandi: ${user.first_name}`);
-        } else {
-            // Yangi foydalanuvchini qo'shamiz
-            await sheet.addRow({
-                'Telegram ID': targetId || '',
-                'Ism Familiya': `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
-                'Username': user.username ? `@${user.username}` : 'No username',
-                'Sana': new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }),
-                'Holati': 'Faqat /start bosgan'
-            });
-            console.log(`✅ Yangi foydalanuvchi Google Sheets'ga yozildi: ${user.first_name}`);
-        }
+        await sheet.addRow({
+            'Telegram ID': targetId || '',
+            'Ism Familiya': `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
+            'Username': user.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : 'No username',
+            'Sana': new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }),
+            'Holati': 'Faqat /start bosgan'
+        });
+        console.log(`✅ Yangi foydalanuvchi (/start) Google Sheets'ga yozildi: ${user.first_name}`);
     } catch (error) {
         console.error('❌ Google Sheets ga yozishda xatolik:', error.message);
     }
@@ -161,39 +143,28 @@ async function updateUserStatus(telegramId, topic = null) {
         const rows = await sheet.getRows();
         const targetId = telegramId.toString();
         
+        let lastKnownName = 'Noma\'lum';
+        let lastKnownUsername = 'No username';
+
+        // Oxirgi ma'lumotlarini qidiramiz
         for (let i = rows.length - 1; i >= 0; i--) {
             if (rows[i].get('Telegram ID') === targetId) {
-                let updated = false;
-                
-                // 1. Holatni yangilash
-                if (rows[i].get('Holati') !== '/start bosgan va ilovani ishlatgan') {
-                    rows[i].set('Holati', '/start bosgan va ilovani ishlatgan');
-                    updated = true;
-                }
-                
-                // 2. Mavzuni qo'shish
-                if (topic) {
-                    try {
-                        const oldTopic = rows[i].get('Taqdimot mavzusi') || '';
-                        // Agar bu mavzu avval qo'shilmagan bo'lsa
-                        if (!oldTopic.includes(topic)) {
-                            const newTopic = oldTopic ? `${oldTopic}, ${topic}` : topic;
-                            rows[i].set('Taqdimot mavzusi', newTopic);
-                            updated = true;
-                        }
-                    } catch (headerErr) {
-                        // Agar "Taqdimot mavzusi" degan header jadvalda bo'lmasa xato beradi, shuni ushlaymiz
-                        console.log("Jadvalda 'Taqdimot mavzusi' ustuni topilmadi.");
-                    }
-                }
-
-                if (updated) {
-                    await rows[i].save();
-                    console.log(`✅ Foydalanuvchi holati yangilandi: ${targetId}`);
-                }
+                lastKnownName = rows[i].get('Ism Familiya') || lastKnownName;
+                lastKnownUsername = rows[i].get('Username') || lastKnownUsername;
                 break;
             }
         }
+
+        await sheet.addRow({
+            'Telegram ID': targetId,
+            'Ism Familiya': lastKnownName,
+            'Username': lastKnownUsername,
+            'Sana': new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }),
+            'Holati': topic ? 'Taqdimot yaratdi' : 'Ilovaga kirdi',
+            'Taqdimot mavzusi': topic || ''
+        });
+        
+        console.log(`✅ Foydalanuvchi harakati qo'shildi: ${targetId} (${topic ? 'Taqdimot' : 'Tashrif'})`);
     } catch (error) {
         console.error("Holatni yangilashda xatolik:", error.message);
     }
