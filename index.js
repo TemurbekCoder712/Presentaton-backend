@@ -562,6 +562,7 @@ app.post('/api/send-file', async (req, res) => {
         }
         res.status(500).json({ success: false, error: e.message });
     }
+});
 
 /**
  * @swagger
