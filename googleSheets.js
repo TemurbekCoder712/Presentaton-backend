@@ -105,6 +105,45 @@ async function appendFeedbackToSheet(name, username, feedback) {
     }
 }
 
+async function appendQuestionToSheet(telegramId, name, username, question) {
+    if (!creds) {
+        console.log("⚠️ Credentials fayli yo'q, Google Sheets ga yozilmadi.");
+        return;
+    }
+
+    try {
+        const serviceAccountAuth = new JWT({
+            email: creds.client_email,
+            key: creds.private_key,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        });
+
+        const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+        await doc.loadInfo(); 
+        
+        // 3-sahifa (Лист3 yoki Savollar) index 2 da joylashgan
+        if (doc.sheetCount < 3) {
+            console.error("❌ Google Sheets da 3-sahifa (Savollar) topilmadi!");
+            return;
+        }
+        
+        const sheet = doc.sheetsByIndex[2]; 
+        
+        // Add row
+        await sheet.addRow({
+            'Telegram ID': telegramId?.toString() || '',
+            'Ism Familiya': name || 'Noma\'lum',
+            'Username': username ? (username.startsWith('@') ? username : `@${username}`) : 'No username',
+            'Sana': new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' }),
+            'Bergan savoli': question || ''
+        });
+        
+        console.log(`✅ Savol Google Sheets'ga yozildi: ${name}`);
+    } catch (error) {
+        console.error('❌ Savolni Google Sheets ga yozishda xatolik:', error.message);
+    }
+}
+
 async function updateUserStatus(telegramId, topic = null) {
     if (!creds || !telegramId) return;
     try {
@@ -159,4 +198,4 @@ async function updateUserStatus(telegramId, topic = null) {
     }
 }
 
-export { appendUserToSheet, appendFeedbackToSheet, updateUserStatus };
+export { appendUserToSheet, appendFeedbackToSheet, updateUserStatus, appendQuestionToSheet };

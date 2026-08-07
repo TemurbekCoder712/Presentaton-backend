@@ -11,7 +11,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import prisma from './prismaClient.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { appendFeedbackToSheet, updateUserStatus } from './googleSheets.js';
+import { appendFeedbackToSheet, updateUserStatus, appendQuestionToSheet } from './googleSheets.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -95,6 +95,54 @@ async function sendTextMessageToTelegram(chatId, text) {
     } catch (e) {
         console.error("Telegramga xabar yuborishda xatolik:", e);
     }
+}
+
+// Telegram API ga PDF yuborish
+async function sendPdfToTelegram(chatId, filePath, filename) {
+    return new Promise((resolve, reject) => {
+        const fileBuffer = fs.readFileSync(filePath);
+        const boundary = '----FormBoundary' + Date.now();
+        
+        const head = Buffer.from(
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="chat_id"\r\n\r\n` +
+            `${chatId}\r\n` +
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="document"; filename="${filename}"\r\n` +
+            `Content-Type: application/pdf\r\n\r\n`
+        );
+        const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+        const body = Buffer.concat([head, fileBuffer, tail]);
+
+        const options = {
+            hostname: 'api.telegram.org',
+            path: `/bot${BOT_TOKEN}/sendDocument`,
+            method: 'POST',
+            family: 4,
+            headers: {
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': body.length
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.ok) resolve(parsed);
+                    else reject(new Error(`Telegram xatosi: ${parsed.description}`));
+                } catch(e) {
+                    reject(new Error('Telegram javobini parse qilib bo\'lmadi'));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
 }
 
 // Swagger sozlamalari
@@ -333,165 +381,187 @@ ${rawContent}`;
         const globalThemeColor = (presentationData.themeColor || "6c63ff").replace('#', '');
         console.log(`✅ Gemini ${slidesData.length} ta dizaynli slayd tayyorladi.`);
 
-        // 3. PPTX fayl yaratish
-        console.log('🎨 PPTX yaratilmoqda...');
-        let pptx = new pptxgen();
-        pptx.layout = 'LAYOUT_16x9';
+        // 4. Avtomatik ravishda yuborish olib tashlandi (UI dan tugma orqali yuboriladi)
+        // Ammo slaydlar array qaytariladi
+        // Vaqtinchalik PPTX yaratish qismi /api/send-file da bo'ladi
+        console.log(`✅ Slayd dizaynlari frontend ga yuborildi.`);
 
-        async function downloadImageLocal(url, filepath) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 sekund kutish
-                
-                const res = await fetch(url, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                
-                if (!res.ok) throw new Error();
-                const arrayBuffer = await res.arrayBuffer();
-                fs.writeFileSync(filepath, Buffer.from(arrayBuffer));
-                return true;
-            } catch(e) { return false; }
-        }
-
-        for (let i = 0; i < slidesData.length; i++) {
-            const slideData = slidesData[i];
-            let slide = pptx.addSlide();
-            const themeColor = globalThemeColor;
-            const layout = slideData.layout || "centered";
-            
-            // 1) Asosiy (Sarlavha) Slayd dizayni
-            if (i === 0) {
-                slide.background = { fill: themeColor }; 
-                slide.addShape(pptx.ShapeType.rect, { x: -1, y: -1, w: 4, h: 4, fill: { color: "FFFFFF", transparency: 85 } });
-                slide.addShape(pptx.ShapeType.rect, { x: 7.5, y: 4.5, w: 5, h: 5, fill: { color: "FFFFFF", transparency: 90 } });
-
-                slide.addText(slideData.title || `Slayd ${i+1}`, {
-                    x: 0.5, y: 2.0, w: 9, h: 1.5, align: "center",
-                    fontSize: 44, bold: true, color: "FFFFFF", fontFace: "Arial", wrap: true
-                });
-                if (slideData.bullets && slideData.bullets.length > 0) {
-                    slide.addText(slideData.bullets.join(' | '), {
-                        x: 0.5, y: 3.5, w: 9, h: 1.5, align: "center",
-                        fontSize: 18, color: "F8F9FA", fontFace: "Arial", italic: true, wrap: true
-                    });
-                }
-                continue;
-            }
-
-            // 2) Qolgan slaydlar foni
-            slide.background = { fill: "F4F5F8" };
-
-            // Zamonaviy Header (Sarlavha qismi)
-            slide.addShape(pptx.ShapeType.rect, {
-                x: 0, y: 0, w: "100%", h: 1.2, fill: { color: themeColor }
-            });
-            slide.addText(slideData.title || `Slayd ${i+1}`, {
-                x: 0.5, y: 0.1, w: "90%", h: 1.0,
-                fontSize: 26, bold: true, color: "FFFFFF", fontFace: "Arial", align: "left", valign: "middle", wrap: true
-            });
-
-            // Pastki chiziq va raqamlash
-            slide.addShape(pptx.ShapeType.rect, { x: 0, y: 7.3, w: "100%", h: 0.2, fill: { color: themeColor } });
-            slide.addText(`${i}`, { x: 9.0, y: 7.0, w: 0.8, h: 0.3, align: "right", fontSize: 12, color: themeColor, fontFace: "Arial" });
-
-            const hasChart = slideData.chart && slideData.chart.labels && slideData.chart.values && slideData.chart.labels.length > 0;
-
-            // Layoutlar
-            if (layout === "split-right" || (layout === "centered" && hasChart)) {
-                if (slideData.bullets && slideData.bullets.length > 0) {
-                    slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 0.5, y: 1.5, w: 4.8, h: 5.2, fontSize: 16, color: "2D3748", fontFace: "Arial", bullet: true, valign: "top", wrap: true
-                    });
-                }
-                if (hasChart) {
-                    const chartData = [{ name: slideData.chart.title || 'Statistika', labels: slideData.chart.labels, values: slideData.chart.values }];
-                    const chartType = slideData.chart.type === 'pie' ? pptx.ChartType.pie : pptx.ChartType.bar;
-                    slide.addChart(chartType, chartData, {
-                        x: 5.6, y: 1.5, w: 4.0, h: 4.5, showLegend: true, legendPos: 'b',
-                        showTitle: true, title: slideData.chart.title, titleFontSize: 14, titleColor: "2D3748",
-                        barDir: 'col', showValue: true, chartColors: [themeColor, "3B82F6", "10B981", "F59E0B"]
-                    });
-                } else {
-                    const imgFilename = `temp_web_${Date.now()}_${i}.jpg`;
-                    const ok = await downloadImageLocal(`https://loremflickr.com/600/450/${encodeURIComponent(slideData.keyword || "education")}`, imgFilename);
-                    if(ok) {
-                        slide.addImage({ path: imgFilename, x: 5.6, y: 1.5, w: 4.0, h: 4.5, sizing: { type: 'cover', w: 4.0, h: 4.5 } });
-                        setTimeout(() => { try { fs.unlinkSync(imgFilename); } catch(e){} }, 5000);
-                    } else {
-                        slide.addShape(pptx.ShapeType.rect, { x: 5.6, y: 1.5, w: 4.0, h: 4.5, fill: { color: themeColor, transparency: 80 } });
-                        slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'VISUAL', { x: 5.6, y: 3.5, w: 4.0, h: 1, align: "center", fontSize: 24, bold: true, color: themeColor });
-                    }
-                }
-            } else if (layout === "split-left") {
-                if (slideData.bullets && slideData.bullets.length > 0) {
-                    slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 4.8, y: 1.5, w: 4.8, h: 5.2, fontSize: 16, color: "2D3748", fontFace: "Arial", bullet: true, valign: "top", wrap: true
-                    });
-                }
-                if (hasChart) {
-                    const chartData = [{ name: slideData.chart.title || 'Statistika', labels: slideData.chart.labels, values: slideData.chart.values }];
-                    const chartType = slideData.chart.type === 'pie' ? pptx.ChartType.pie : pptx.ChartType.bar;
-                    slide.addChart(chartType, chartData, {
-                        x: 0.4, y: 1.5, w: 4.0, h: 4.5, showLegend: true, legendPos: 'b',
-                        showTitle: true, title: slideData.chart.title, titleFontSize: 14, titleColor: "2D3748",
-                        barDir: 'col', showValue: true, chartColors: [themeColor, "3B82F6", "10B981", "F59E0B"]
-                    });
-                } else {
-                    const imgFilename = `temp_web_${Date.now()}_${i}.jpg`;
-                    const ok = await downloadImageLocal(`https://loremflickr.com/600/450/${encodeURIComponent(slideData.keyword || "education")}`, imgFilename);
-                    if(ok) {
-                        slide.addImage({ path: imgFilename, x: 0.4, y: 1.5, w: 4.0, h: 4.5, sizing: { type: 'cover', w: 4.0, h: 4.5 } });
-                        setTimeout(() => { try { fs.unlinkSync(imgFilename); } catch(e){} }, 5000);
-                    } else {
-                        slide.addShape(pptx.ShapeType.rect, { x: 0.4, y: 1.5, w: 4.0, h: 4.5, fill: { color: themeColor, transparency: 80 } });
-                        slide.addText(slideData.keyword ? slideData.keyword.toUpperCase() : 'INFO', { x: 0.4, y: 3.5, w: 4.0, h: 1, align: "center", fontSize: 24, bold: true, color: themeColor });
-                    }
-                }
-            } else {
-                // Centered - Karta uslubida
-                slide.addShape(pptx.ShapeType.rect, {
-                    x: 1.0, y: 1.5, w: 8.0, h: 5.2, fill: { color: "FFFFFF" }
-                });
-                if (slideData.bullets && slideData.bullets.length > 0) {
-                    slide.addText(slideData.bullets.join('\n\n'), {
-                        x: 1.5, y: 1.8, w: 7.0, h: 4.6, fontSize: 18, color: "2D3748", fontFace: "Arial", align: "center", valign: "middle", wrap: true
-                    });
-                }
-            }
-        }
-
-        // 3. Faylni saqlash (backend papkasida)
-        fileName = path.join(__dirname, `${Date.now()}_taqdimot.pptx`);
-        await pptx.writeFile({ fileName });
-        console.log(`✅ PPTX saqlandi: ${fileName}`);
-
-        // 4. Telegram'ga yuborish
-        console.log(`📤 Telegram'ga yuborilmoqda (chatId: ${chatId})...`);
-        const friendlyName = `${topic.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_').slice(0, 30)}_taqdimot.pptx`;
-        await sendPptxToTelegram(chatId, fileName, friendlyName);
-        console.log('✅ Telegram\'ga yuborildi!');
-
-        // 5. Vaqtinchalik faylni o'chirish
-        fs.unlinkSync(fileName);
-
-        // 6. Balansni ayirish (MVP uchun o'chirildi)
-        /*
-        await prisma.user.update({
-            where: { telegramId: BigInt(chatId) },
-            data: { balance: { decrement: 1 } }
-        });
-        */
-
-        res.json({ success: true, slideCount: slidesData.length, slides: slidesData });
+        res.json({ success: true, slideCount: slidesData.length, slides: slidesData, themeColor: globalThemeColor });
 
     } catch (error) {
         console.error("❌ Backend xatolik:", error.message || error);
-        if (fileName && fs.existsSync(fileName)) {
-            try { fs.unlinkSync(fileName); } catch(e) {}
-        }
         res.status(500).json({ success: false, error: error.message || 'Noma\'lum xatolik' });
     }
 });
+
+import PDFDocument from 'pdfkit';
+
+app.post('/api/send-file', async (req, res) => {
+    const { topic, chatId, slides, type, themeColor } = req.body;
+    if (!chatId || !slides || slides.length === 0) return res.status(400).json({ success: false, error: "Ma'lumot to'liq emas" });
+
+    let fileName = null;
+    try {
+        const safeTopic = topic ? topic.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_').slice(0, 30) : 'taqdimot';
+        
+        if (type === 'pptx') {
+            console.log('🎨 PPTX yaratilmoqda va yuborilmoqda...');
+            let pptx = new pptxgen();
+            pptx.layout = 'LAYOUT_16x9';
+
+            async function downloadImageLocal(url, filepath) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 2000);
+                    const response = await fetch(url, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    if (!response.ok) throw new Error();
+                    const arrayBuffer = await response.arrayBuffer();
+                    fs.writeFileSync(filepath, Buffer.from(arrayBuffer));
+                    return true;
+                } catch(e) { return false; }
+            }
+
+            for (let i = 0; i < slides.length; i++) {
+                const slideData = slides[i];
+                let slide = pptx.addSlide();
+                const color = themeColor || "6c63ff";
+                const layout = slideData.layout || "centered";
+                
+                if (i === 0) {
+                    slide.background = { fill: color }; 
+                    slide.addShape(pptx.ShapeType.rect, { x: -1, y: -1, w: 4, h: 4, fill: { color: "FFFFFF", transparency: 85 } });
+                    slide.addShape(pptx.ShapeType.rect, { x: 7.5, y: 4.5, w: 5, h: 5, fill: { color: "FFFFFF", transparency: 90 } });
+
+                    slide.addText(slideData.title || `Slayd ${i+1}`, {
+                        x: 0.5, y: 2.0, w: 9, h: 1.5, align: "center",
+                        fontSize: 44, bold: true, color: "FFFFFF", fontFace: "Arial", wrap: true
+                    });
+                    if (slideData.bullets && slideData.bullets.length > 0) {
+                        slide.addText(slideData.bullets.join(' | '), {
+                            x: 0.5, y: 3.5, w: 9, h: 1.5, align: "center",
+                            fontSize: 18, color: "F8F9FA", fontFace: "Arial", italic: true, wrap: true
+                        });
+                    }
+                    continue;
+                }
+
+                slide.background = { fill: "F4F5F8" };
+                slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 1.2, fill: { color: color } });
+                slide.addText(slideData.title || `Slayd ${i+1}`, { x: 0.5, y: 0.1, w: "90%", h: 1.0, fontSize: 26, bold: true, color: "FFFFFF", fontFace: "Arial", align: "left", valign: "middle", wrap: true });
+                slide.addShape(pptx.ShapeType.rect, { x: 0, y: 7.3, w: "100%", h: 0.2, fill: { color: color } });
+                slide.addText(`${i}`, { x: 9.0, y: 7.0, w: 0.8, h: 0.3, align: "right", fontSize: 12, color: color, fontFace: "Arial" });
+
+                const hasChart = slideData.chart && slideData.chart.labels && slideData.chart.values && slideData.chart.labels.length > 0;
+                
+                if (layout === "split-right" || (layout === "centered" && hasChart)) {
+                    if (slideData.bullets && slideData.bullets.length > 0) {
+                        slide.addText(slideData.bullets.join('\n\n'), { x: 0.5, y: 1.5, w: 4.8, h: 5.2, fontSize: 16, color: "2D3748", fontFace: "Arial", bullet: true, valign: "top", wrap: true });
+                    }
+                    if (hasChart) {
+                        const chartData = [{ name: slideData.chart.title || 'Statistika', labels: slideData.chart.labels, values: slideData.chart.values }];
+                        const chartType = slideData.chart.type === 'pie' ? pptx.ChartType.pie : pptx.ChartType.bar;
+                        slide.addChart(chartType, chartData, { x: 5.6, y: 1.5, w: 4.0, h: 4.5, showLegend: true, legendPos: 'b', showTitle: true, title: slideData.chart.title, titleFontSize: 14, titleColor: "2D3748", barDir: 'col', showValue: true, chartColors: [color, "3B82F6", "10B981", "F59E0B"] });
+                    } else {
+                        const imgFilename = `temp_web_${Date.now()}_${i}.jpg`;
+                        const ok = await downloadImageLocal(`https://loremflickr.com/600/450/${encodeURIComponent(slideData.keyword || "education")}`, imgFilename);
+                        if(ok) {
+                            slide.addImage({ path: imgFilename, x: 5.6, y: 1.5, w: 4.0, h: 4.5, sizing: { type: 'cover', w: 4.0, h: 4.5 } });
+                            setTimeout(() => { try { fs.unlinkSync(imgFilename); } catch(e){} }, 5000);
+                        } else {
+                            slide.addShape(pptx.ShapeType.rect, { x: 5.6, y: 1.5, w: 4.0, h: 4.5, fill: { color: color, transparency: 80 } });
+                        }
+                    }
+                } else if (layout === "split-left") {
+                    if (slideData.bullets && slideData.bullets.length > 0) {
+                        slide.addText(slideData.bullets.join('\n\n'), { x: 4.8, y: 1.5, w: 4.8, h: 5.2, fontSize: 16, color: "2D3748", fontFace: "Arial", bullet: true, valign: "top", wrap: true });
+                    }
+                    if (hasChart) {
+                        const chartData = [{ name: slideData.chart.title || 'Statistika', labels: slideData.chart.labels, values: slideData.chart.values }];
+                        const chartType = slideData.chart.type === 'pie' ? pptx.ChartType.pie : pptx.ChartType.bar;
+                        slide.addChart(chartType, chartData, { x: 0.4, y: 1.5, w: 4.0, h: 4.5, showLegend: true, legendPos: 'b', showTitle: true, title: slideData.chart.title, titleFontSize: 14, titleColor: "2D3748", barDir: 'col', showValue: true, chartColors: [color, "3B82F6", "10B981", "F59E0B"] });
+                    } else {
+                        const imgFilename = `temp_web_${Date.now()}_${i}.jpg`;
+                        const ok = await downloadImageLocal(`https://loremflickr.com/600/450/${encodeURIComponent(slideData.keyword || "education")}`, imgFilename);
+                        if(ok) {
+                            slide.addImage({ path: imgFilename, x: 0.4, y: 1.5, w: 4.0, h: 4.5, sizing: { type: 'cover', w: 4.0, h: 4.5 } });
+                            setTimeout(() => { try { fs.unlinkSync(imgFilename); } catch(e){} }, 5000);
+                        } else {
+                            slide.addShape(pptx.ShapeType.rect, { x: 0.4, y: 1.5, w: 4.0, h: 4.5, fill: { color: color, transparency: 80 } });
+                        }
+                    }
+                } else {
+                    slide.addShape(pptx.ShapeType.rect, { x: 1.0, y: 1.5, w: 8.0, h: 5.2, fill: { color: "FFFFFF" } });
+                    if (slideData.bullets && slideData.bullets.length > 0) {
+                        slide.addText(slideData.bullets.join('\n\n'), { x: 1.5, y: 1.8, w: 7.0, h: 4.6, fontSize: 18, color: "2D3748", fontFace: "Arial", align: "center", valign: "middle", wrap: true });
+                    }
+                }
+            }
+
+            fileName = path.join(__dirname, `${Date.now()}_taqdimot.pptx`);
+            await pptx.writeFile({ fileName });
+            console.log(`✅ PPTX yaratildi: ${fileName}`);
+            await sendPptxToTelegram(chatId, fileName, `${safeTopic}_taqdimot.pptx`);
+            fs.unlinkSync(fileName);
+            res.json({ success: true });
+
+        } else if (type === 'pdf') {
+            console.log('📄 PDF yaratilmoqda va yuborilmoqda...');
+            fileName = path.join(__dirname, `${Date.now()}_taqdimot.pdf`);
+            
+            await new Promise((resolve, reject) => {
+                const doc = new PDFDocument({ layout: 'landscape', size: [960, 540] });
+                const stream = fs.createWriteStream(fileName);
+                doc.pipe(stream);
+
+                for (let i = 0; i < slides.length; i++) {
+                    if (i > 0) doc.addPage();
+                    const slide = slides[i];
+                    const color = themeColor || "6c63ff";
+                    
+                    doc.rect(0, 0, 960, 540).fill(i === 0 ? `#${color}` : '#F4F5F8');
+
+                    if (i === 0) {
+                        doc.fillColor('#FFFFFF').fontSize(44).text(slide.title || `Slayd ${i+1}`, 50, 200, { width: 860, align: 'center' });
+                        if (slide.bullets) {
+                            doc.fontSize(18).fillColor('#F8F9FA').text(slide.bullets.join(' | '), 50, 320, { width: 860, align: 'center' });
+                        }
+                    } else {
+                        doc.rect(0, 0, 960, 100).fill(`#${color}`);
+                        doc.fillColor('#FFFFFF').fontSize(32).text(slide.title || `Slayd ${i+1}`, 50, 35, { width: 860, align: 'left' });
+                        
+                        if (slide.bullets) {
+                            doc.fillColor('#2D3748').fontSize(22);
+                            let y = 160;
+                            slide.bullets.forEach(b => {
+                                doc.text(`• ${b}`, 50, y, { width: 860, align: 'left' });
+                                y += doc.heightOfString(`• ${b}`, { width: 860 }) + 20;
+                            });
+                        }
+                        doc.rect(0, 520, 960, 20).fill(`#${color}`);
+                        doc.fillColor(`#${color}`).fontSize(14).text(`${i}`, 900, 502);
+                    }
+                }
+                
+                doc.end();
+                stream.on('finish', resolve);
+                stream.on('error', reject);
+            });
+
+            console.log(`✅ PDF yaratildi: ${fileName}`);
+            await sendPdfToTelegram(chatId, fileName, `${safeTopic}_taqdimot.pdf`);
+            fs.unlinkSync(fileName);
+            res.json({ success: true });
+        } else {
+            res.status(400).json({ success: false, error: "Noma'lum fayl turi" });
+        }
+    } catch (e) {
+        console.error("Fayl yuborishda xatolik:", e);
+        if (fileName && fs.existsSync(fileName)) {
+            try { fs.unlinkSync(fileName); } catch(err) {}
+        }
+        res.status(500).json({ success: false, error: e.message });
+    }
 
 /**
  * @swagger
@@ -512,8 +582,12 @@ ${rawContent}`;
  *         description: AI javobi
  */
 app.post('/api/support-chat', async (req, res) => {
-    const { message, history } = req.body;
+    const { message, history, user } = req.body;
     if (!message) return res.status(400).json({ success: false, error: "Xabar kiritilmagan" });
+
+    if (user && user.id) {
+        await appendQuestionToSheet(user.id, `${user.first_name || ''} ${user.last_name || ''}`.trim(), user.username, message);
+    }
 
     try {
         const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
